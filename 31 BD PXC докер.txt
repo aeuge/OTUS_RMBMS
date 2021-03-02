@@ -1,0 +1,52 @@
+/* Percona eXtraDB Cluster в контейнерах */
+
+/* Создаем в папке /c/projects/otus/percona/pxc/config файл custom.cnf */
+[mysqld]
+ssl-ca = /cert/ca.pem
+ssl-cert = /cert/server-cert.pem
+ssl-key = /cert/server-key.pem
+
+[client]
+ssl-ca = /cert/ca.pem
+ssl-cert = /cert/client-cert.pem
+ssl-key = /cert/client-key.pem
+
+[sst]
+encrypt = 4
+ssl-ca = /cert/ca.pem
+ssl-cert = /cert/server-cert.pem
+ssl-key = /cert/server-key.pem
+
+/* Создаем папку /c/projects/otus/percona/pxc/cert с вышеуказанными сертификатами, сгенерированными через mysql_ssl_rsa_setup */
+
+/* Создаем сеть */
+docker network create pxc-network
+
+/* Создаем первую ноду */
+docker run -d -e MYSQL_ROOT_PASSWORD=test1234# -e CLUSTER_NAME=pxc-cluster --name=pxc-1 --net=pxc-network -v /c/projects/otus/percona/pxc/cert:/cert -v /c/projects/otus/percona/pxc/config:/etc/percona-xtradb-cluster.conf.d percona/percona-xtradb-cluster:8.0
+  
+/* Создаем вторую ноду */
+docker run -d -e MYSQL_ROOT_PASSWORD=test1234# -e CLUSTER_NAME=pxc-cluster -e CLUSTER_JOIN=pxc-1 --name=pxc-2 --net=pxc-network -v /c/projects/otus/percona/pxc/cert:/cert -v /c/projects/otus/percona/pxc/config:/etc/percona-xtradb-cluster.conf.d percona/percona-xtradb-cluster:8.0
+
+/* Создаем третью ноду */
+docker run -d -e MYSQL_ROOT_PASSWORD=test1234# -e CLUSTER_NAME=pxc-cluster -e CLUSTER_JOIN=pxc-1 --name=pxc-3 --net=pxc-network -v /c/projects/otus/percona/pxc/cert:/cert -v /c/projects/otus/percona/pxc/config:/etc/percona-xtradb-cluster.conf.d percona/percona-xtradb-cluster:8.0
+
+/* Проверка работы - первая */
+show status like 'wsrep%';
+docker exec -it pxc-1 /usr/bin/mysql -uroot -ptest1234#
+wsrep_incoming_addresses         | 50121249280a:3306,165bca4a4135:3306,df3fff303f33:3306
+
+/* Проверка работы - вторая */
+docker exec -it pxc-1 /usr/bin/mysql -uroot -ptest1234#
+create database test;
+docker exec -it pxc-2 /usr/bin/mysql -uroot -ptest1234#
+show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
+| test               |
++--------------------+
